@@ -1,0 +1,39 @@
+{
+  "name": "YOUR-BOT-NAME" ,
+  "version": "1.0.0",
+  "description": " WhatsApp Bot with Multi-Number Support",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "7.0.0-rc14",
+    "express": "^4.18.2",
+    "fs-extra": "^11.2.0",
+    "node-fetch": "^2.6.1",
+    "dotenv": "^16.4.5",
+    "pino": "^8.17.0",
+    "jimp": "^1.6.1",
+    "form-data": "^4.0.0",
+    "fs": "^0.0.1-security",
+    "@octokit/rest": "^20.0.2",
+    "child_process": "^1.0.2",
+    "path": "^0.12.7",
+    "axios": "^1.2.5",
+    "moment-timezone": "^0.6.0",
+    "cheerio": "latest"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "whatsapp",
+    "bot",
+    "multi-device",
+    "baileys",
+    "your-bot-name"
+  ],
+  "author": "YOUR-NAME",
+  "license": "MIT"
+}
