@@ -1,5 +1,5 @@
 {
-  "name": "YOUR-BOT-NAME" ,
+  "name": "ves-mini-bot" ,
   "version": "1.0.0",
   "description": " WhatsApp Bot with Multi-Number Support",
   "main": "index.js",
@@ -32,8 +32,8 @@
     "bot",
     "multi-device",
     "baileys",
-    "your-bot-name"
+    "ves-mini-bot"
   ],
-  "author": "YOUR-NAME",
+  "author": "ves-mini-bot",
   "license": "MIT"
 }
