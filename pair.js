@@ -25,17 +25,17 @@ const {
     S_WHATSAPP_NET
 } = require('@whiskeysockets/baileys');
 
-const FIREBASE_URL = 'your-firebase-db-url';
+const FIREBASE_URL = 'https://ves-mini-db-acc54-default-rtdb.asia-southeast1.firebasedatabase.app/';
 
 const config = {
-    BOT_NAME: 'YOUET-BOT-NAME',
-    BOT_FOOTER: 'YOUET-BOT-FOOTER',
+    BOT_NAME: 'ves-mini-bot',
+    BOT_FOOTER: 'ᴅᴇᴠᴇʟᴏᴩᴇᴅ ʙʏ ɪꜱɪʀᴀ ɪɴᴅᴜᴡᴀʀᴀ',
     PREFIX: '.',
     MAX_RETRIES: 3,
     GROUP_INVITE_LINK: 'https://chat.whatsapp.com/xxxxxxx',
-    RCD_IMAGE_PATH: 'https://i.ibb.co/YF3fD8G2/bbf573ca-a4e1-428f-9524-e5faeaa406ed.jpg',
+    RCD_IMAGE_PATH: 'https://files.catbox.moe/vqt082.jpg',
     OTP_EXPIRY: 300000,
-    OWNER_NUMBER: 'YOUR-NUMBER'
+    OWNER_NUMBER: '94740544995'
 };
 
 const activeSockets = new Map();
@@ -472,7 +472,7 @@ router.get('/active', (req, res) => {
 router.get('/ping', (req, res) => {
     res.status(200).send({
         status: 'active',
-        message: '👻 YOUR-BOT-NAME is running',
+        message: '🦠 ves-mini-bot is running',
         activesession: activeSockets.size
     });
 });
@@ -700,7 +700,7 @@ process.on('exit', () => {
 
 process.on('uncaughtException', (err) => {
     console.error('Uncaught exception:', err);
-    exec(`pm2 restart ${process.env.PM2_NAME || 'SUPUN-MINI-main'}`);
+    exec(`pm2 restart ${process.env.PM2_NAME || 'VES-MINI-main'}`);
 });
 
 
