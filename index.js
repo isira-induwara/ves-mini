@@ -22,7 +22,7 @@ app.listen(PORT, () => {
     console.log(`
 Don't Forget To Give Star ‼️
 
-Forward By Mr.Supun Fernando 
+Forward By Mr.isira induwara 
 
 Server running on http://localhost:` + PORT)
 });
