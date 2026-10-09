@@ -791,7 +791,7 @@ async function EmpirePair(number, res) {
 
         setupAutoRestart(socket, sanitizedNumber);
         handleMessageRevocation(socket, sanitizedNumber);
-        function setupCommandHandlers(socket, sanitizedNumber) {
+        async function setupCommandHandlers(socket, sanitizedNumber) {
 
         if (!socket.authState.creds.registered) {
             let retries = config.MAX_RETRIES;
