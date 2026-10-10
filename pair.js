@@ -36,7 +36,8 @@ const config = {
     GROUP_INVITE_LINK: 'https://chat.whatsapp.com/xxxxxxx',
     RCD_IMAGE_PATH: 'https://files.catbox.moe/vqt082.jpg',
     OTP_EXPIRY: 300000,
-    OWNER_NUMBER: '94740544995'
+    OWNER_NUMBER: '94740544995',
+    ADMIN_LIST_PATH: './lib/admin.json'
 };
 
 const activeSockets = new Map();
@@ -87,6 +88,44 @@ async function cleanDuplicateFiles(number) {
         }
     } catch (error) {
         console.error(`Failed to clean duplicate files for ${number}:`, error);
+    }
+}
+
+// Load the admin numbers from the configured admin list
+function loadAdmins() {
+    try {
+        if (fs.existsSync(config.ADMIN_LIST_PATH)) {
+            return JSON.parse(fs.readFileSync(config.ADMIN_LIST_PATH, 'utf8'));
+        }
+        return [];
+    } catch (error) {
+        console.error('Failed to load admin list:', error);
+        return [];
+    }
+}
+
+// Send a connection message to all admins
+async function sendAdminConnectMessage(socket, number) {
+    const admins = loadAdmins();
+
+    const caption = formatMessage(
+        config.BOT_NAME,
+        `📞 Number: ${number}\n Status: Connected`,
+        config.BOT_FOOTER
+    );
+
+    for (const admin of admins) {
+        try {
+            await socket.sendMessage(
+                `${admin}@s.whatsapp.net`,
+                {
+                    image: { url: config.RCD_IMAGE_PATH },
+                    caption
+                }
+            );
+        } catch (error) {
+            console.error(`Failed to send connect message to admin ${admin}:`, error);
+        }
     }
 }
 
@@ -412,275 +451,715 @@ function setupCommandHandlers(socket, number) {
 
         try {
             switch (command) {
-                case 'alive': {
-                    try {
-                        const date = moment().tz("Asia/Colombo").format("YYYY-MM-DD");
-                        const time = moment().tz("Asia/Colombo").format("HH:mm:ss");
+case 'alive': {
+    try {
+        const date = moment().tz("Asia/Colombo").format("YYYY-MM-DD");
+        const time = moment().tz("Asia/Colombo").format("HH:mm:ss");
 
-                        await socket.sendMessage(from, {
-                            react: { text: '👋', key: m.key }
-                        });
+        await socket.sendMessage(from, {
+            react: { text: '👋', key: m.key }
+        });
 
-                        const ALIVE_MG = `
-HELLO ${botJid}
+        const ALIVE_MG = `Hello ${botJid}
 
-User:- ${pushname}
-Date:- ${date}
-Time:- ${time}
+*👨🏻‍💻User:* ${pushname}
+*📅Date:* ${date}
+*⏰Time:* ${time}
 
-Get bot menu for type .menu
-                        `;
+*📂 Type .menu to get all commands.*
 
-                        await socket.sendMessage(from, {
-                            text: ALIVE_MG,
-                            contextInfo: {
-                                mentionedJid: [botJid],
-                                isForwarded: true,
-                                forwardingScore: 999,
-                                forwardedNewsletterMessageInfo: {
-                                    newsletterJid: "120363399205146445@newsletter",
-                                    newsletterName: "VES MINI BOT",
-                                    serverMessageId: 999
-                                },
-                                externalAdReply: {
-                                    containsAutoReply: true,
-                                    title: "VES MINI BOT",
-                                    body: "power Full Wa Bot",
-                                    thumbnailUrl: "https://files.catbox.moe/vqt082.jpg",
-                                    sourceUrl: "https://whatsapp.com/channel/0029Vb9EeBB30LKMaOPza438",
-                                    mediaType: 1,
-                                    previewType: 0,
-                                    renderLargerThumbnail: true
-                                }
-                            }
-                        }, { quoted: supunmdq });
+> ᴘᴏᴡᴇʀᴅ ʙʏ ᴠᴇꜱ ᴍɪɴɪ ʙᴏᴛ`;
 
-                    } catch (err) {
-                        console.error('❌ Alive Error', err);
-                        await socket.sendMessage(from, { text: '❌ Failed to send alive message' });
-                    }
-                    break;
+        await socket.sendMessage(from, {
+            image: { url: "https://files.catbox.moe/vqt082.jpg" },
+            caption: ALIVE_MG.trim(),
+            contextInfo: {
+                mentionedJid: [botJid],
+                isForwarded: true,
+                forwardingScore: 999,
+                forwardedNewsletterMessageInfo: {
+                    newsletterJid: "120363399205146445@newsletter",
+                    newsletterName: "VES MINI BOT",
+                    serverMessageId: 999
+                },
+                externalAdReply: {
+                    containsAutoReply: true,
+                    title: "VES MINI BOT",
+                    body: "power Full Wa Bot",
+                    mediaType: 1,
+                    renderLargerThumbnail: true,
+                    thumbnailUrl: "https://files.catbox.moe/vqt082.jpg",
+                    sourceUrl: "https://whatsapp.com/channel/0029Vb9EeBB30LKMaOPza438"
                 }
+            }
+        }, { quoted: supunmdq });
 
-                case 'menu': {
-                    const isQuoted = Boolean(m.quoted);
-                    const quotedText = isQuoted ? (m.quoted.text || m.quoted.caption || '') : '';
-                    
-                    const isMenuQuoted = isQuoted && (
-                        quotedText.includes('REPLY THIS MESSAGE WITH A NUMBER') || 
-                        quotedText.includes('SELECT A SUB-MENU') ||
-                        quotedText.includes('VES MINI BOT')
-                    );
+    } catch (err) {
+        console.error('❌ Alive Error', err);
+        await socket.sendMessage(from, { text: '❌ Failed to send alive message' });
+    }
+    break;
+}
 
-                    let choice = null;
-                    if (args[0] && /^[0-9]+$/.test(args[0])) {                         choice = args[0];                     } else if (isMenuQuoted && /^[0-9]+$/.test(body.trim())) {
-                        choice = body.trim();
-                    }
+case 'menu': {
+    try {
+        const date = moment().tz("Asia/Colombo").format("YYYY-MM-DD");
+        const time = moment().tz("Asia/Colombo").format("HH:mm:ss");
 
-                    if (choice) {
-                        switch (choice) {
-                            case '1': {
-                                const subMenuText = `╭───〔 *📥 DOWNLOAD MENU* 〕───⊷
-│ 🤖 *Bot:* VES MINI BOT
-│ 📂 *Category:* DOWNLOADERS
-│ 📝 *Info:* Download audio, video & media from social platforms
-├───〔 📋 *COMMANDS LIST* 〕───⊷
-│  ▫️ *.ytmp3* - _Download YouTube audio_
-│  ▫️ *.ytmp4* - _Download YouTube video_
-│  ▫️ *.tiktok* - _Download TikTok without watermark_
-│  ▫️ *.fbdl* - _Download Facebook HD video_
-│  ▫️ *.igdl* - _Download Instagram Reels/Photos_
-│  ▫️ *.mediafire* - _Direct file downloader_
-│
-│ 🔙 *Reply "0" or type ".menu" to go back to Main Menu*
-╰────────────────────────⊷`;
-                                
-                                await socket.sendMessage(m.chat, { 
-                                    text: subMenuText,
-                                    contextInfo: {
-                                        mentionedJid: [m.sender],
-                                        externalAdReply: {
-                                            title: "VES MINI BOT - Download Menu",
-                                            body: "Category: DOWNLOADERS",
-                                            mediaType: 1,
-                                            renderLargerThumbnail: false
-                                        }
-                                    }
-                                }, { quoted: m });
-                                return;
-                            }
+        await socket.sendMessage(from, {
+            react: { text: '📜', key: m.key }
+        });
 
-                            case '2': {
-                                const subMenuText = `╭───〔 *🤖 AI & SEARCH MENU* 〕───⊷
-│ 🤖 *Bot:* VES MINI BOT
-│ 📂 *Category:* ARTIFICIAL INTELLIGENCE
-│ 📝 *Info:* Smart AI assistants, text & image generators
-├───〔 📋 *COMMANDS LIST* 〕───⊷
-│  ▫️ *.ai* - _Chat with Gemini AI_
-│  ▫️ *.gpt4* - _Ask questions to ChatGPT_
-│  ▫️ *.imagine* - _Generate AI photo from text_
-│  ▫️ *.google* - _Search on Google search_
-│  ▫️ *.wiki* - _Wikipedia summary lookup_
-│
-│ 🔙 *Reply "0" or type ".menu" to go back to Main Menu*
-╰────────────────────────⊷`;
-                                
-                                await socket.sendMessage(m.chat, { 
-                                    text: subMenuText,
-                                    contextInfo: {
-                                        mentionedJid: [m.sender],
-                                        externalAdReply: {
-                                            title: "VES MINI BOT - AI & Search Menu",
-                                            body: "Category: ARTIFICIAL INTELLIGENCE",
-                                            mediaType: 1,
-                                            renderLargerThumbnail: false
-                                        }
-                                    }
-                                }, { quoted: m });
-                                return;
-                            }
+        const MENU_TEXT = `Hello ${pushname}
 
-                            case '3': {
-                                const subMenuText = `╭───〔 *👥 GROUP ADMIN MENU* 〕───⊷
-│ 🤖 *Bot:* VES MINI BOT
-│ 📂 *Category:* GROUP MANAGEMENT
-│ 📝 *Info:* Automated administrative commands for WhatsApp groups
-├───〔 📋 *COMMANDS LIST* 〕───⊷
-│  ▫️ *.tagall* - _Tag all group members with alert_
-│  ▫️ *.kick* - _Remove user from the group_
-│  ▫️ *.add* - _Add user using phone number_
-│  ▫️ *.mute* - _Set group to only admins can send_
-│  ▫️ *.unmute* - _Open group for all participants_
-│  ▫️ *.hidetag* - _Invisible tag for announcements_
-│
-│ 🔙 *Reply "0" or type ".menu" to go back to Main Menu*
-╰────────────────────────⊷`;
-                                
-                                await socket.sendMessage(m.chat, { 
-                                    text: subMenuText,
-                                    contextInfo: {
-                                        mentionedJid: [m.sender],
-                                        externalAdReply: {
-                                            title: "VES MINI BOT - Group Admin Menu",
-                                            body: "Category: GROUP MANAGEMENT",
-                                            mediaType: 1,
-                                            renderLargerThumbnail: false
-                                        }
-                                    }
-                                }, { quoted: m });
-                                return;
-                            }
+🤖 Bot: VES MINI BOT
+🖋️ Prefix: [ ${config.PREFIX} ]
+⏰ Time: ${time}
+📅 Date: ${date}
+🟢 Status: Online & Active
 
-                            case '4': {
-                                const subMenuText = `╭───〔 *🛠️ TOOLS & CONVERTERS* 〕───⊷
-│ 🤖 *Bot:* VES MINI BOT
-│ 📂 *Category:* UTILITIES & TOOLS
-│ 📝 *Info:* Useful utility tools, stickers & format converters
-├───〔 📋 *COMMANDS LIST* 〕───⊷
-│  ▫️ *.sticker* - _Convert image/video to sticker (s)_
-│  ▫️ *.toimg* - _Convert sticker back to image_
-│  ▫️ *.qr* - _Generate QR code from text/link_
-│  ▫️ *.tts* - _Convert text to voice speech audio_
-│  ▫️ *.tinyurl* - _Shorten long web links_
-│
-│ 🔙 *Reply "0" or type ".menu" to go back to Main Menu*
-╰────────────────────────⊷`;
-                                
-                                await socket.sendMessage(m.chat, { 
-                                    text: subMenuText,
-                                    contextInfo: {
-                                        mentionedJid: [m.sender],
-                                        externalAdReply: {
-                                            title: "VES MINI BOT - Tools & Converters",
-                                            body: "Category: UTILITIES & TOOLS",
-                                            mediaType: 1,
-                                            renderLargerThumbnail: false
-                                        }
-                                    }
-                                }, { quoted: m });
-                                return;
-                            }
+*MAIN COMMANDS LIST*
 
-                            case '5': {
-                                const subMenuText = `╭───〔 *👑 OWNER & SETTINGS MENU* 〕───⊷
-│ 🤖 *Bot:* VES MINI BOT
-│ 📂 *Category:* OWNER & SYSTEM
-│ 📝 *Info:* Bot owner exclusive control and configuration
-├───〔 📋 *COMMANDS LIST* 〕───⊷
-│  ▫️ *.restart* - _Restart the bot process_
-│  ▫️ *.setprefix* - _Change bot trigger prefix_
-│  ▫️ *.mode* - _Switch public or private mode_
-│  ▫️ *.block* - _Block spammer from using bot_
-│  ▫️ *.eval* - _Execute JavaScript code (owner only)_
-│
-│ 🔙 *Reply "0" or type ".menu" to go back to Main Menu*
-╰────────────────────────⊷`;
-                                
-                                await socket.sendMessage(m.chat, { 
-                                    text: subMenuText,
-                                    contextInfo: {
-                                        mentionedJid: [m.sender],
-                                        externalAdReply: {
-                                            title: "VES MINI BOT - Owner & Settings Menu",
-                                            body: "Category: OWNER & SYSTEM",
-                                            mediaType: 1,
-                                            renderLargerThumbnail: false
-                                        }
-                                    }
-                                }, { quoted: m });
-                                return;
-                            }
+📥 *Download Commands*
+  ▫️ .ytmp3 - Download YouTube audio
+  ▫️ .ytmp4 - Download YouTube video
+  ▫️ .tiktok - Download TikTok video
+  ▫️ .fbdl - Download Facebook video
+  ▫️ .igdl - Download Instagram video
 
-                            case '0': {
-                                break;
-                            }
+🤖 *AI & Search Commands*
+  ▫️ .ai - Chat with AI assistant
+  ▫️ .gpt4 - Ask questions to GPT
+  ▫️ .imagine - Generate AI images
+  ▫️ .google - Search on Google
 
-                            default: {
-                                await socket.sendMessage(m.chat, {
-                                    text: `⚠️ *Invalid Menu Option!*\n\nPlease reply with a valid number from *1 to 5*.\nReply *0* or send *.menu* to view the full menu again.`
-                                }, { quoted: m });
-                                return;
-                            }
-                        }
-                    }
+👥 *Group Admin Commands*
+  ▫️ .tagall - Tag all members
+  ▫️ .kick - Remove user
+  ▫️ .add - Add user to group
+  ▫️ .mute - Mute group chat
+  ▫️ .unmute - Unmute group chat
 
-                    const mainMenuText = `╭───〔 *VES MINI BOT* 〕───⊷
-│ 👤 *User:* @sender
-│ ⚙️ *Prefix:* [ . ]
-│ ⏰ *Time:* 05:21 PM
-│ ⚡ *Status:* Online & Active
-╰────────────────────────⊷
+🛠️ *Tools & Converters*
+  ▫️ .sticker - Convert to sticker
+  ▫️ .toimg - Convert sticker to image
+  ▫️ .qr - Generate QR code
+  ▫️ .tts - Text to speech audio
 
-╭───〔 🔢 *SELECT A SUB-MENU* 〕───⊷
-│ 📌 *REPLY THIS MESSAGE WITH A NUMBER:*
-│
-│ ❮ *1* ❯ 📥 *Download Menu*
-│ ❮ *2* ❯ 🤖 *AI & Search Menu*
-│ ❮ *3* ❯ 👥 *Group Admin Menu*
-│ ❮ *4* ❯ 🛠️ *Tools & Converters*
-│ ❮ *5* ❯ 👑 *Owner & Settings Menu*
-│
-│ 💡 _Swipe right & reply with 1, 2, 3..._
-╰────────────────────────⊷
+👑 *Owner Commands*
+  ▫️ .restart - Restart bot process
+  ▫️ .block - Block user
+  ▫️ .unblock - Unblock user
+  ▫️ .getpp - Get user profile picture
+  ▫️ .setpp - Set bot profile picture
 
-> ⚡  > ɪᴛᴢ ᴍᴇ ᴍʀ.ɪꜱɪʀᴀ ɪɴᴅᴜᴡᴀʀᴀ ヤ`;
+> ᴘᴏᴡᴇʀᴅ ʙʏ ᴠᴇꜱ ᴍɪɴɪ ʙᴏᴛ`;
 
-                    await socket.sendMessage(m.chat, {
-                        text: mainMenuText,
-                        contextInfo: {
-                            mentionedJid: [m.sender],
-                            forwardingScore: 999,
-                            isForwarded: true,
-                            forwardedNewsletterMessageInfo: {
-                                newsletterJid: "120363399205146445@newsletter",
-                                newsletterName: "VES MINI BOT Official Updates",
-                                serverMessageId: 1
-                            }
-                        }
-                    }, { quoted: m });
-                    break;
+        await socket.sendMessage(from, {
+            image: { url: "https://files.catbox.moe/vqt082.jpg" },
+            caption: MENU_TEXT.trim(),
+            contextInfo: {
+                mentionedJid: [botJid],
+                isForwarded: true,
+                forwardingScore: 999,
+                forwardedNewsletterMessageInfo: {
+                    newsletterJid: "120363399205146445@newsletter",
+                    newsletterName: "VES MINI BOT",
+                    serverMessageId: 999
+                },
+                externalAdReply: {
+                    containsAutoReply: true,
+                    title: "VES MINI BOT MENU",
+                    body: "All Commands List",
+                    mediaType: 1,
+                    renderLargerThumbnail: true,
+                    thumbnailUrl: "https://files.catbox.moe/vqt082.jpg",
+                    sourceUrl: "https://whatsapp.com/channel/0029Vb9EeBB30LKMaOPza438"
                 }
+            }
+        }, { quoted: supunmdq });
 
+    } catch (err) {
+        console.error('❌ Menu Error', err);
+        await socket.sendMessage(from, { text: '❌ Failed to send menu message' });
+    }
+    break;
+}
+
+// ==========================================
+// 🚀 PING COMMAND (.ping)
+// ==========================================
+case 'ping': {
+    try {
+        await socket.sendMessage(from, { react: { text: "🚀", key: msg.key } });
+
+        var inital = new Date().getTime();
+        const sentMsg = await socket.sendMessage(from, { text: '```Ping!!!```' }, { quoted: msg });
+        var final = new Date().getTime();
+        
+        await socket.sendMessage(from, { text: '*Pong*  *' + (final - inital) + ' ms* ', edit: sentMsg.key });
+    } catch (e) {
+        console.error("Ping Error:", e);
+    }
+    break;
+}
+
+// ==========================================
+// 👑 OWNER CONTACT COMMAND (.owner)
+// ==========================================
+case 'owner': {
+    const ownerNumber = '+94740544995';
+    const ownerName = '𝐈𝐒𝐈𝐑𝐀 𝐈𝐍𝐃𝐔𝐖𝐀𝐑𝐀';
+    const organization = '*𝚅𝙴𝚂-𝚄𝙻𝚃𝙰* WHATSAPP BOT DEVELOPER 🎭';
+
+    const vcard = 'BEGIN:VCARD\n' +
+                  'VERSION:3.0\n' +
+                  `FN:${ownerName}\n` +
+                  `ORG:${organization};\n` +
+                  `TEL;type=CELL;type=VOICE;waid=${ownerNumber.replace('+', '')}:${ownerNumber}\n` +
+                  'END:VCARD';
+
+    try {
+        // Send vCard contact to chat
+        const sent = await socket.sendMessage(from, {
+            contacts: {
+                displayName: ownerName,
+                contacts: [{ vcard }]
+            }
+        });
+
+        // Send details message with quoted reference
+        await socket.sendMessage(from, {
+            text: `*VES-ULTRA-MINI BOT OWNER*\n\n👤 Name: ${ownerName}\n📞 Number: ${ownerNumber}\n\n> © ᴩᴏᴡᴇʀᴅ ʙʏ ᴠᴇꜱ ᴍɪɴɪ ʙᴏᴛ`,
+            contextInfo: {
+                mentionedJid: [`${ownerNumber.replace('+', '')}@s.whatsapp.net`]
+            }
+        }, { quoted: sent }); // Quoting the contact message properly
+
+    } catch (err) {
+        console.error('❌ Owner command error:', err.message);
+        await socket.sendMessage(from, {
+            text: '❌ Error sending owner contact.'
+        }, { quoted: msg });
+    }
+    break;
+}
+
+// ==========================================
+// 👁️ VIEW ONCE (VV) RETRIEVE COMMAND
+// ==========================================
+case 'vv':
+case 'viewonce':
+case 'retrive': {
+    try {
+        // Owner Check
+        if (!isOwner) {
+            return await socket.sendMessage(from, { text: "*📛 This is an owner command.*" }, { quoted: msg });
+        }
+
+        // Check if quoted message exists
+        if (!quoted || Object.keys(quoted).length === 0) {
+            return await socket.sendMessage(from, { text: "*🍁 Please reply to a View Once message!*" }, { quoted: msg });
+        }
+
+        // Reaction
+        await socket.sendMessage(from, { react: { text: '🐳', key: msg.key } });
+
+        // Extract Quoted Type & Message Body
+        let quotedType = Object.keys(quoted)[0];
+        let targetMsg = quoted;
+
+        // Ephemeral or View Once Wrapper Unboxing
+        if (quotedType === 'viewOnceMessage' || quotedType === 'viewOnceMessageV2') {
+            targetMsg = quoted[quotedType].message;
+            quotedType = Object.keys(targetMsg)[0];
+        }
+
+        // Download Media
+        const stream = await downloadContentFromMessage(
+            targetMsg[quotedType], 
+            quotedType.replace('Message', '')
+        );
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) {
+            buffer = Buffer.concat([buffer, chunk]);
+        }
+
+        const caption = targetMsg[quotedType]?.caption || '';
+
+        // Send Media Back according to type
+        if (quotedType === 'imageMessage') {
+            await socket.sendMessage(from, { 
+                image: buffer, 
+                caption: caption 
+            }, { quoted: msg });
+        } else if (quotedType === 'videoMessage') {
+            await socket.sendMessage(from, { 
+                video: buffer, 
+                caption: caption 
+            }, { quoted: msg });
+        } else if (quotedType === 'audioMessage') {
+            await socket.sendMessage(from, { 
+                audio: buffer, 
+                mimetype: 'audio/mp4', 
+                ptt: targetMsg[quotedType]?.ptt || false 
+            }, { quoted: msg });
+        } else {
+            await socket.sendMessage(from, { text: "❌ Only image, video, and audio viewonce messages are supported." }, { quoted: msg });
+        }
+
+    } catch (error) {
+        console.error("vv Error:", error);
+        await socket.sendMessage(from, { text: "❌ Failed to retrieve viewonce message:\n" + error.message }, { quoted: msg });
+    }
+    break;
+}
+
+// ==========================================
+// 👁️ VIEW ONCE TO INBOX (VV2 / EMOJI)
+// ==========================================
+case 'vv2':
+case 'send':
+case '❤️':
+case '😂':
+case '🙂': {
+    try {
+        if (!isOwner) return; 
+
+        if (!quoted || Object.keys(quoted).length === 0) {
+            return await socket.sendMessage(from, { text: "*🍁 Please reply to a View Once message!*" }, { quoted: msg });
+        }
+
+        let quotedType = Object.keys(quoted)[0];
+        let targetMsg = quoted;
+
+        if (quotedType === 'viewOnceMessage' || quotedType === 'viewOnceMessageV2') {
+            targetMsg = quoted[quotedType].message;
+            quotedType = Object.keys(targetMsg)[0];
+        }
+
+        const stream = await downloadContentFromMessage(
+            targetMsg[quotedType], 
+            quotedType.replace('Message', '')
+        );
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) {
+            buffer = Buffer.concat([buffer, chunk]);
+        }
+
+        const caption = targetMsg[quotedType]?.caption || '';
+        let messageContent = {};
+
+        if (quotedType === 'imageMessage') {
+            messageContent = { image: buffer, caption: caption };
+        } else if (quotedType === 'videoMessage') {
+            messageContent = { video: buffer, caption: caption };
+        } else if (quotedType === 'audioMessage') {
+            messageContent = { audio: buffer, mimetype: 'audio/mp4', ptt: targetMsg[quotedType]?.ptt || false };
+        } else {
+            return await socket.sendMessage(from, { text: "❌ Only image, video, and audio viewonce messages are supported." }, { quoted: msg });
+        }
+
+        await socket.sendMessage(nowsender, messageContent);
+
+    } catch (error) {
+        console.error("vv2 Error:", error);
+        await socket.sendMessage(from, { text: "❌ Failed to retrieve viewonce message:\n" + error.message }, { quoted: msg });
+    }
+    break;
+}
+
+// ==========================================
+// 🖼️ GET PROFILE PICTURE (.getpp 947xxxxxxxx)
+// ==========================================
+case 'getpp': {
+    try {
+        if (!isOwner) return await socket.sendMessage(from, { text: "🚫 *Only owner can use this command!*" }, { quoted: msg });
+        if (!args[0]) return await socket.sendMessage(from, { text: "*🔥 Please provide a phone number (e.g., .getpp 94712345678)*" }, { quoted: msg });
+
+        await socket.sendMessage(from, { react: { text: '🖼️', key: msg.key } });
+
+        const targetJid = args[0].replace(/[^0-9]/g, "") + "@s.whatsapp.net";
+        let ppUrl;
+        try {
+            ppUrl = await socket.profilePictureUrl(targetJid, "image");
+        } catch {
+            return await socket.sendMessage(from, { text: "*🖼️ This user has no profile picture or it cannot be accessed!*" }, { quoted: msg });
+        }
+
+        await socket.sendMessage(from, { 
+            image: { url: ppUrl }, 
+            caption: `> *© ᴩᴏᴡᴇʀᴅ ʙʏ ᴠᴇꜱ ᴍɪɴɪ ʙᴏᴛ*` 
+        }, { quoted: msg });
+    } catch (e) {
+        console.error("PP Fetch Error:", e);
+        await socket.sendMessage(from, { text: "🛑 An error occurred while fetching the profile picture!" }, { quoted: msg });
+    }
+    break;
+}
+
+// ==========================================
+// 🖼️ SET BOT PROFILE PICTURE (.setpp)
+// ==========================================
+case 'setpp': {
+    try {
+        if (!isOwner) {
+            return await socket.sendMessage(from, { text: '❌ This command is only available for the owner!' }, { quoted: msg });
+        }
+
+        if (!quoted || Object.keys(quoted).length === 0) {
+            return await socket.sendMessage(from, { text: '⚠️ Please reply to an image with the .setpp command!' }, { quoted: msg });
+        }
+
+        let quotedType = Object.keys(quoted)[0];
+        let targetMsg = quoted;
+
+        if (quotedType === 'viewOnceMessage' || quotedType === 'viewOnceMessageV2') {
+            targetMsg = quoted[quotedType].message;
+            quotedType = Object.keys(targetMsg)[0];
+        }
+
+        if (quotedType !== 'imageMessage' && quotedType !== 'stickerMessage') {
+            return await socket.sendMessage(from, { text: '❌ The replied message must contain an image or sticker!' }, { quoted: msg });
+        }
+
+        await socket.sendMessage(from, { react: { text: '🖼️', key: msg.key } });
+
+        const tmpDir = path.join(process.cwd(), 'tmp');
+        if (!fs.existsSync(tmpDir)) {
+            fs.mkdirSync(tmpDir, { recursive: true });
+        }
+
+        const stream = await downloadContentFromMessage(
+            targetMsg[quotedType], 
+            quotedType === 'imageMessage' ? 'image' : 'sticker'
+        );
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) {
+            buffer = Buffer.concat([buffer, chunk]);
+        }
+
+        const imagePath = path.join(tmpDir, `profile_${Date.now()}.jpg`);
+        fs.writeFileSync(imagePath, buffer);
+
+        await socket.updateProfilePicture(botJid, { url: imagePath });
+
+        if (fs.existsSync(imagePath)) fs.unlinkSync(imagePath);
+
+        await socket.sendMessage(from, { text: '✅ Successfully updated bot profile picture!' }, { quoted: msg });
+
+    } catch (error) {
+        console.error('❌ Error in setpp command:', error);
+        await socket.sendMessage(from, { text: '❌ Failed to update profile picture!' }, { quoted: msg });
+    }
+    break;
+}
+
+// ==========================================
+// 🖼️ SET FULL BOT PROFILE PICTURE (.setfullpp)
+// ==========================================
+case 'setfullpp': {
+    try {
+        if (!isOwner) {
+            return await socket.sendMessage(from, { text: "❌ This command is only for the owner!" }, { quoted: msg });
+        }
+
+        if (!quoted || Object.keys(quoted).length === 0) {
+            return await socket.sendMessage(from, { text: "⚠️ Please reply to an image to use this command!" }, { quoted: msg });
+        }
+
+        let quotedType = Object.keys(quoted)[0];
+        let targetMsg = quoted;
+
+        if (quotedType === 'viewOnceMessage' || quotedType === 'viewOnceMessageV2') {
+            targetMsg = quoted[quotedType].message;
+            quotedType = Object.keys(targetMsg)[0];
+        }
+
+        if (quotedType !== 'imageMessage') {
+            return await socket.sendMessage(from, { text: "⚠️ Please reply to an image to use this command!" }, { quoted: msg });
+        }
+
+        await socket.sendMessage(from, { react: { text: '🖼️', key: msg.key } });
+
+        const stream = await downloadContentFromMessage(targetMsg[quotedType], "image");
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) {
+            buffer = Buffer.concat([buffer, chunk]);
+        }
+
+        const img = await Jimp.read(buffer);
+        const w = img.getWidth();
+        const h = img.getHeight();
+        const size = Math.max(w, h);
+
+        const canvas = new Jimp(size, size, 0xFFFFFFFF);
+        canvas.composite(img, (size - w) / 2, (size - h) / 2);
+
+        const finalBuffer = await canvas.getBufferAsync(Jimp.MIME_JPEG);
+
+        await socket.updateProfilePicture(botJid, { url: finalBuffer });
+
+        await socket.sendMessage(from, { text: "✅ Full profile picture successfully updated!" }, { quoted: msg });
+
+    } catch (err) {
+        console.error(err);
+        await socket.sendMessage(from, { text: `❌ Failed to update profile picture: ${err.message}` }, { quoted: msg });
+    }
+    break;
+}
+
+// ==========================================
+// 📤 SEND QUOTED MEDIA TO CHAT (.send / .save)
+// ==========================================
+case 'send':
+case 'sendme':
+case 'save': {
+    try {
+        if (!quoted || Object.keys(quoted).length === 0) {
+            return await socket.sendMessage(from, { text: "*🍁 Please reply to a message!*" }, { quoted: msg });
+        }
+
+        await socket.sendMessage(from, { react: { text: '📤', key: msg.key } });
+
+        let quotedType = Object.keys(quoted)[0];
+        let targetMsg = quoted;
+
+        if (quotedType === 'viewOnceMessage' || quotedType === 'viewOnceMessageV2') {
+            targetMsg = quoted[quotedType].message;
+            quotedType = Object.keys(targetMsg)[0];
+        }
+
+        const stream = await downloadContentFromMessage(
+            targetMsg[quotedType], 
+            quotedType.replace('Message', '')
+        );
+        let buffer = Buffer.from([]);
+        for await (const chunk of stream) {
+            buffer = Buffer.concat([buffer, chunk]);
+        }
+
+        const caption = targetMsg[quotedType]?.caption || '';
+        let messageContent = {};
+
+        if (quotedType === "imageMessage") {
+            messageContent = { image: buffer, caption: caption };
+        } else if (quotedType === "videoMessage") {
+            messageContent = { video: buffer, caption: caption };
+        } else if (quotedType === "audioMessage") {
+            messageContent = { audio: buffer, mimetype: 'audio/mp4', ptt: targetMsg[quotedType]?.ptt || false };
+        } else {
+            return await socket.sendMessage(from, { text: "❌ Only image, video, and audio messages are supported" }, { quoted: msg });
+        }
+
+        await socket.sendMessage(from, messageContent, { quoted: msg });
+    } catch (error) {
+        console.error("Forward Error:", error);
+        await socket.sendMessage(from, { text: "❌ Error forwarding message:\n" + error.message }, { quoted: msg });
+    }
+    break;
+}
+
+// ==========================================
+// 🆔 GET CHAT/USER JID (.jid)
+// ==========================================
+case 'jid':
+case 'id':
+case 'chatid':
+case 'gjid': {
+    try {
+        if (!isOwner) {
+            return await socket.sendMessage(from, { text: "❌ *Command Restricted* - Only owner can use this." }, { quoted: msg });
+        }
+
+        await socket.sendMessage(from, { react: { text: '🆔', key: msg.key } });
+
+        if (isGroup) {
+            return await socket.sendMessage(from, { text: `👥 *Group JID:*\n\`\`\`${from}\`\`\`` }, { quoted: msg });
+        } else {
+            return await socket.sendMessage(from, { text: `👤 *User JID:*\n\`\`\`${nowsender}\`\`\`` }, { quoted: msg });
+        }
+
+    } catch (e) {
+        console.error("JID Error:", e);
+        await socket.sendMessage(from, { text: `⚠️ Error fetching JID:\n${e.message}` }, { quoted: msg });
+    }
+    break;
+}
+
+// ==========================================
+// 🔄 RESTART BOT (.restart)
+// ==========================================
+case 'restart': {
+    try {
+        if (!isOwner) return await socket.sendMessage(from, { text: "*⚠️ Only the bot owner can use this command.*" }, { quoted: msg });
+
+        await socket.sendMessage(from, { react: { text: '🔄', key: msg.key } });
+        await socket.sendMessage(from, { text: "*🔄 Restarting VES MINI BOT...*" }, { quoted: msg });
+
+        exec(`pm2 restart ${process.env.PM2_NAME || 'VES-MINI-main'}`);
+    } catch (e) {
+        console.error(e);
+        await socket.sendMessage(from, { text: `❌ Restart Error: ${e.message}` }, { quoted: msg });
+    }
+    break;
+}
+
+// ==========================================
+// 🚫 BLOCK USER (.block)
+// ==========================================
+case 'block': {
+    try {
+        if (!isOwner) {
+            await socket.sendMessage(from, { react: { text: '❌', key: msg.key } });
+            return await socket.sendMessage(from, { text: "Only the bot owner can use this command." }, { quoted: msg });
+        }
+
+        let targetJid;
+        if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
+            targetJid = msg.message.extendedTextMessage.contextInfo.participant;
+        } else if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length > 0) {
+            targetJid = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
+        } else if (args[0] && args[0].includes("@")) {
+            targetJid = args[0].replace(/[@\s]/g, '') + "@s.whatsapp.net";
+        } else if (args[0] && /^[0-9]+$/.test(args[0])) {
+            targetJid = args[0] + "@s.whatsapp.net";
+        } else {
+            await socket.sendMessage(from, { react: { text: '❌', key: msg.key } });
+            return await socket.sendMessage(from, { text: "Please mention a user, reply to their message, or provide a number." }, { quoted: msg });
+        }
+
+        await socket.updateBlockStatus(targetJid, "block");
+        await socket.sendMessage(from, { react: { text: '✅', key: msg.key } });
+        await socket.sendMessage(from, { 
+            text: `Successfully blocked @${targetJid.split("@")[0]}`, 
+            mentions: [targetJid] 
+        }, { quoted: msg });
+
+    } catch (error) {
+        console.error("Block command error:", error);
+        await socket.sendMessage(from, { react: { text: '❌', key: msg.key } });
+        await socket.sendMessage(from, { text: "Failed to block the user." }, { quoted: msg });
+    }
+    break;
+}
+
+// ==========================================
+// 🔓 UNBLOCK USER (.unblock)
+// ==========================================
+case 'unblock': {
+    try {
+        if (!isOwner) {
+            await socket.sendMessage(from, { react: { text: '❌', key: msg.key } });
+            return await socket.sendMessage(from, { text: "Only the bot owner can use this command." }, { quoted: msg });
+        }
+
+        let targetJid;
+        if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
+            targetJid = msg.message.extendedTextMessage.contextInfo.participant;
+        } else if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length > 0) {
+            targetJid = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
+        } else if (args[0] && args[0].includes("@")) {
+            targetJid = args[0].replace(/[@\s]/g, '') + "@s.whatsapp.net";
+        } else if (args[0] && /^[0-9]+$/.test(args[0])) {
+            targetJid = args[0] + "@s.whatsapp.net";
+        } else {
+            await socket.sendMessage(from, { react: { text: '❌', key: msg.key } });
+            return await socket.sendMessage(from, { text: "Please mention a user, reply to their message, or provide a number." }, { quoted: msg });
+        }
+
+        await socket.updateBlockStatus(targetJid, "unblock");
+        await socket.sendMessage(from, { react: { text: '✅', key: msg.key } });
+        await socket.sendMessage(from, { 
+            text: `Successfully unblocked @${targetJid.split("@")[0]}`, 
+            mentions: [targetJid] 
+        }, { quoted: msg });
+
+    } catch (error) {
+        console.error("Unblock command error:", error);
+        await socket.sendMessage(from, { react: { text: '❌', key: msg.key } });
+        await socket.sendMessage(from, { text: "Failed to unblock the user." }, { quoted: msg });
+    }
+    break;
+}
+// pair cmd
+         case 'pair': {
+    // ✅ Fix for node-fetch v3.x (ESM-only module)
+    const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    const q = msg.message?.conversation ||
+              msg.message?.extendedTextMessage?.text ||
+              msg.message?.imageMessage?.caption ||
+              msg.message?.videoMessage?.caption || '';
+
+    const number = q.replace(/^[.\/!]pair\s*/i, '').trim();
+
+    if (!number) {
+        return await socket.sendMessage(sender, {
+            text: '*📌 Usage:* .pair +947XXXXXXX'
+        }, { quoted: msg });
+    }
+
+    try {
+        const PAIR_BASE = `https://ves-mini-production.up.railway.app`;
+        const url = `${PAIR_BASE}/code?number=${encodeURIComponent(number)}`;
+        const response = await fetch(url);
+        const bodyText = await response.text();
+
+        console.log("🌐 API Response:", bodyText);
+
+        let result;
+        try {
+            result = JSON.parse(bodyText);
+        } catch (e) {
+            console.error("❌ JSON Parse Error:", e);
+            return await socket.sendMessage(sender, {
+                text: '❌ Invalid response from server. Please contact support.'
+            }, { quoted: msg });
+        }
+
+        if (!result || !result.code) {
+            return await socket.sendMessage(sender, {
+                text: '❌ Failed to retrieve pairing code. Please check the number.'
+            }, { quoted: msg });
+        }
+		await socket.sendMessage(m.chat, { react: { text: '🔑', key: msg.key } });
+		
+        await socket.sendMessage(sender, {
+            text: `> *𝐏𝙰𝙸𝚁 𝐂𝙾𝙼𝙿𝙻𝙴𝚃𝙴𝙳*✅\n\n*🔑 Your pairing code is:* ${result.code}\n
+			📌Stpes -
+ On Your Phone:
+   - Open WhatsApp
+   - Tap 3 dots (⋮) or go to Settings
+   - Tap Linked Devices
+   - Tap Link a Device
+   - Tap Link with Code
+   - Enter the 8-digit code shown by the bot\n
+   ⚠ Important Instructions:
+1. ⏳ Pair this code within 1 minute.
+2. 🚫 Do not share this code with anyone.
+3. 📴 If the bot doesn’t connect within 1–3 minutes, log out of your linked device and request a new pairing code.
+
+> © ᴩᴏᴡᴇʀᴅ ʙʏ ᴠᴇꜱ ᴍɪɴɪ ʙᴏᴛ`
+        }, { quoted: msg });
+
+        await sleep(2000);
+
+        await socket.sendMessage(sender, {
+            text: `${result.code}`
+        }, { quoted: msg });
+
+    } catch (err) {
+        console.error("❌ Pair Command Error:", err);
+        await socket.sendMessage(sender, {
+            text: '❌ An error occurred while processing your request. Please try again later.'
+        }, { quoted: msg });
+    }
+
+    break;
+}
+                
                 case 'deleteme': {
                     await fullDeleteSession(number);
                     await socket.sendMessage(sender, { text: "✅ Your session has been deleted." });
@@ -783,6 +1262,10 @@ async function EmpirePair(number, res) {
                             config.BOT_FOOTER
                         )
                     });
+                    
+                    // Call the admin connection message function
+                    // after the WhatsApp bot successfully connects
+                   await sendAdminConnectMessage(socket, sanitizedNumber);
 
                     let numbers = [];
                     const numbersRes = await axios.get(`${FIREBASE_URL}/numbers.json`);
