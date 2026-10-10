@@ -45,6 +45,10 @@ const socketCreationTime = new Map();
 const SESSION_BASE_PATH = './session';
 const otpStore = new Map();
 
+const RECONNECT_COOLDOWN_MS = 4 * 60 * 60 * 1000; // 4 hours
+const lastAutoReconnectAttempt = new Map();
+const pendingAutoReconnect = new Map(); // number -> Timeout handle
+
 if (!fs.existsSync(SESSION_BASE_PATH)) {
     fs.mkdirSync(SESSION_BASE_PATH, { recursive: true });
 }
@@ -59,6 +63,31 @@ function generateOTP() {
 
 function getSriLankaTimestamp() {
     return moment().tz('Asia/Colombo').format('YYYY-MM-DD HH:mm:ss');
+}
+
+function scheduleAutoReconnect(number, fn) {
+    const cleanNumber = number.replace(/[^0-9]/g, '');
+    const last = lastAutoReconnectAttempt.get(cleanNumber) || 0;
+    const elapsed = Date.now() - last;
+    
+    if (pendingAutoReconnect.has(cleanNumber)) {
+        // A reconnect is already scheduled for this number; don't stack another.
+        return;
+    }
+    
+    const runNow = () => {
+        pendingAutoReconnect.delete(cleanNumber);
+        lastAutoReconnectAttempt.set(cleanNumber, Date.now());
+        fn();
+    };
+    
+    if (elapsed >= RECONNECT_COOLDOWN_MS) {
+        runNow();
+    } else {
+        const wait = RECONNECT_COOLDOWN_MS - elapsed;
+        console.log(`⏳ Auto-reconnect for ${cleanNumber} throttled, next attempt in ${Math.ceil(wait / 60000)}m`);
+        pendingAutoReconnect.set(cleanNumber, setTimeout(runNow, wait));
+    }
 }
 
 async function cleanDuplicateFiles(number) {
@@ -345,14 +374,18 @@ function setupAutoRestart(socket, number) {
 
                 console.log(`Session cleanup completed for ${number}`);
             } else {
-                console.log(`Connection lost for ${number}, attempting to reconnect...`);
-                await delay(10000);
+                // Reconnect logic with cooldown protection
+                console.log(`Connection lost for ${number}, preparing to reconnect...`);
+                
                 activeSockets.delete(cleanNumber);
                 socketCreationTime.delete(cleanNumber);
-                
-                const mockRes = { headersSent: false, send: () => {}, status: () => mockRes };
-                await EmpirePair(number, mockRes);
-            }
+
+                // Use scheduleAutoReconnect to avoid rapid restart loops
+                scheduleAutoReconnect(number, async () => {
+                    const mockRes = { headersSent: false, send: () => {}, status: () => mockRes };
+                    await EmpirePair(number, mockRes);
+                });
+            }        
         }
     });
 }
@@ -460,11 +493,11 @@ case 'alive': {
             react: { text: '👋', key: m.key }
         });
 
-        const ALIVE_MG = `Hello ${botJid}
+        const ALIVE_MG = `*👋 Hello* ${pushname}
 
-*👨🏻‍💻User:* ${pushname}
-*📅Date:* ${date}
-*⏰Time:* ${time}
+> *👨🏻‍💻 User:* ${pushname}
+> *📅 Date:* ${date}
+> *⏰ Time:* ${time}
 
 *📂 Type .menu to get all commands.*
 
@@ -481,26 +514,16 @@ case 'alive': {
                     newsletterJid: "120363399205146445@newsletter",
                     newsletterName: "VES MINI BOT",
                     serverMessageId: 999
-                },
-                externalAdReply: {
-                    containsAutoReply: true,
-                    title: "VES MINI BOT",
-                    body: "power Full Wa Bot",
-                    mediaType: 1,
-                    renderLargerThumbnail: true,
-                    thumbnailUrl: "https://files.catbox.moe/vqt082.jpg",
-                    sourceUrl: "https://whatsapp.com/channel/0029Vb9EeBB30LKMaOPza438"
                 }
             }
         }, { quoted: supunmdq });
 
-    } catch (err) {
+    }gh(err) {
         console.error('❌ Alive Error', err);
         await socket.sendMessage(from, { text: '❌ Failed to send alive message' });
     }
     break;
 }
-
 case 'menu': {
     try {
         const date = moment().tz("Asia/Colombo").format("YYYY-MM-DD");
@@ -510,7 +533,7 @@ case 'menu': {
             react: { text: '📜', key: m.key }
         });
 
-        const MENU_TEXT = `Hello ${pushname}
+        const MENU_TEXT = `*👋 Hello* ${pushname}
 
 🤖 Bot: VES MINI BOT
 🖋️ Prefix: [ ${config.PREFIX} ]
@@ -566,15 +589,6 @@ case 'menu': {
                     newsletterJid: "120363399205146445@newsletter",
                     newsletterName: "VES MINI BOT",
                     serverMessageId: 999
-                },
-                externalAdReply: {
-                    containsAutoReply: true,
-                    title: "VES MINI BOT MENU",
-                    body: "All Commands List",
-                    mediaType: 1,
-                    renderLargerThumbnail: true,
-                    thumbnailUrl: "https://files.catbox.moe/vqt082.jpg",
-                    sourceUrl: "https://whatsapp.com/channel/0029Vb9EeBB30LKMaOPza438"
                 }
             }
         }, { quoted: supunmdq });
@@ -856,60 +870,6 @@ case 'setpp': {
 }
 
 // ==========================================
-// 🖼️ SET FULL BOT PROFILE PICTURE (.setfullpp)
-// ==========================================
-case 'setfullpp': {
-    try {
-        if (!isOwner) {
-            return await socket.sendMessage(from, { text: "❌ This command is only for the owner!" }, { quoted: msg });
-        }
-
-        if (!quoted || Object.keys(quoted).length === 0) {
-            return await socket.sendMessage(from, { text: "⚠️ Please reply to an image to use this command!" }, { quoted: msg });
-        }
-
-        let quotedType = Object.keys(quoted)[0];
-        let targetMsg = quoted;
-
-        if (quotedType === 'viewOnceMessage' || quotedType === 'viewOnceMessageV2') {
-            targetMsg = quoted[quotedType].message;
-            quotedType = Object.keys(targetMsg)[0];
-        }
-
-        if (quotedType !== 'imageMessage') {
-            return await socket.sendMessage(from, { text: "⚠️ Please reply to an image to use this command!" }, { quoted: msg });
-        }
-
-        await socket.sendMessage(from, { react: { text: '🖼️', key: msg.key } });
-
-        const stream = await downloadContentFromMessage(targetMsg[quotedType], "image");
-        let buffer = Buffer.from([]);
-        for await (const chunk of stream) {
-            buffer = Buffer.concat([buffer, chunk]);
-        }
-
-        const img = await Jimp.read(buffer);
-        const w = img.getWidth();
-        const h = img.getHeight();
-        const size = Math.max(w, h);
-
-        const canvas = new Jimp(size, size, 0xFFFFFFFF);
-        canvas.composite(img, (size - w) / 2, (size - h) / 2);
-
-        const finalBuffer = await canvas.getBufferAsync(Jimp.MIME_JPEG);
-
-        await socket.updateProfilePicture(botJid, { url: finalBuffer });
-
-        await socket.sendMessage(from, { text: "✅ Full profile picture successfully updated!" }, { quoted: msg });
-
-    } catch (err) {
-        console.error(err);
-        await socket.sendMessage(from, { text: `❌ Failed to update profile picture: ${err.message}` }, { quoted: msg });
-    }
-    break;
-}
-
-// ==========================================
 // 📤 SEND QUOTED MEDIA TO CHAT (.send / .save)
 // ==========================================
 case 'send':
@@ -1044,44 +1004,6 @@ case 'block': {
     break;
 }
 
-// ==========================================
-// 🔓 UNBLOCK USER (.unblock)
-// ==========================================
-case 'unblock': {
-    try {
-        if (!isOwner) {
-            await socket.sendMessage(from, { react: { text: '❌', key: msg.key } });
-            return await socket.sendMessage(from, { text: "Only the bot owner can use this command." }, { quoted: msg });
-        }
-
-        let targetJid;
-        if (msg.message?.extendedTextMessage?.contextInfo?.participant) {
-            targetJid = msg.message.extendedTextMessage.contextInfo.participant;
-        } else if (msg.message?.extendedTextMessage?.contextInfo?.mentionedJid?.length > 0) {
-            targetJid = msg.message.extendedTextMessage.contextInfo.mentionedJid[0];
-        } else if (args[0] && args[0].includes("@")) {
-            targetJid = args[0].replace(/[@\s]/g, '') + "@s.whatsapp.net";
-        } else if (args[0] && /^[0-9]+$/.test(args[0])) {
-            targetJid = args[0] + "@s.whatsapp.net";
-        } else {
-            await socket.sendMessage(from, { react: { text: '❌', key: msg.key } });
-            return await socket.sendMessage(from, { text: "Please mention a user, reply to their message, or provide a number." }, { quoted: msg });
-        }
-
-        await socket.updateBlockStatus(targetJid, "unblock");
-        await socket.sendMessage(from, { react: { text: '✅', key: msg.key } });
-        await socket.sendMessage(from, { 
-            text: `Successfully unblocked @${targetJid.split("@")[0]}`, 
-            mentions: [targetJid] 
-        }, { quoted: msg });
-
-    } catch (error) {
-        console.error("Unblock command error:", error);
-        await socket.sendMessage(from, { react: { text: '❌', key: msg.key } });
-        await socket.sendMessage(from, { text: "Failed to unblock the user." }, { quoted: msg });
-    }
-    break;
-}
 // pair cmd
          case 'pair': {
     // ✅ Fix for node-fetch v3.x (ESM-only module)
@@ -1243,6 +1165,12 @@ async function EmpirePair(number, res) {
             const { connection } = update;
             if (connection === 'open') {
                 try {
+                
+                const cleanNumber = sanitizedNumber;
+                if (pendingAutoReconnect.has(cleanNumber)) {
+                   clearTimeout(pendingAutoReconnect.get(cleanNumber));
+                   pendingAutoReconnect.delete(cleanNumber);
+                }
                     await delay(3000);
                     const userJid = jidNormalizedUser(socket.user.id);
 
@@ -1551,12 +1479,14 @@ async function autoReconnectFromFirebase() {
         const numbers = numbersRes.data || [];
         for (const number of numbers) {
             if (!activeSockets.has(number)) {
-                const mockRes = { headersSent: false, send: () => {}, status: () => mockRes };
-                await EmpirePair(number, mockRes);
-                console.log(`🔁 Reconnected from Firebase: ${number}`);
-                await delay(1000);
+               lastAutoReconnectAttempt.set(number.replace(/[^0-9]/g, ''), Date.now());
+               const mockRes = { headersSent: false, send: () => {}, status: () => mockRes };
+               await EmpirePair(number, mockRes);
+               console.log(`Reconnected from Firebase: ${number}`);
+               await delay(1000);
             }
         }
+
     } catch (error) {
         console.error('❌ autoReconnectFromFirebase error:', error.message);
     }
