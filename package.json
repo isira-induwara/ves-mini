@@ -23,7 +23,8 @@
     "axios": "^1.2.5",
     "moment-timezone": "^0.6.0",
     "cheerio": "latest",
-    "file-type": "latest"
+    "file-type": "latest",
+    "body-parser": "latest"
   },
   "engines": {
     "node": ">=22.0.0"
