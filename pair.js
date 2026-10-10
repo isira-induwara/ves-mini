@@ -490,7 +490,10 @@ case 'alive': {
         const time = moment().tz("Asia/Colombo").format("HH:mm:ss");
 
         await socket.sendMessage(from, {
-            react: { text: '👋', key: m.key }
+            react: {
+                text: '👋',
+                key: m.key
+            }
         });
 
         const ALIVE_MG = `*👋 Hello* ${pushname}
@@ -501,10 +504,12 @@ case 'alive': {
 
 *📂 Type .menu to get all commands.*
 
-> ᴘᴏᴡᴇʀᴅ ʙʏ ᴠᴇꜱ ᴍɪɴɪ ʙᴏᴛ`;
+> ᴘᴏᴡᴇʀᴇᴅ ʙʏ ᴠᴇꜱ ᴍɪɴɪ ʙᴏᴛ`;
 
         await socket.sendMessage(from, {
-            image: { url: "https://files.catbox.moe/vqt082.jpg" },
+            image: {
+                url: "https://files.catbox.moe/vqt082.jpg"
+            },
             caption: ALIVE_MG.trim(),
             contextInfo: {
                 mentionedJid: [botJid],
@@ -516,12 +521,18 @@ case 'alive': {
                     serverMessageId: 999
                 }
             }
-        }, { quoted: supunmdq });
+        }, {
+            quoted: supunmdq
+        });
 
-    }gh(err) {
-        console.error('❌ Alive Error', err);
-        await socket.sendMessage(from, { text: '❌ Failed to send alive message' });
+    } catch (err) {
+        console.error('❌ Alive Error:', err);
+
+        await socket.sendMessage(from, {
+            text: '❌ Failed to send alive message'
+        });
     }
+
     break;
 }
 case 'menu': {
