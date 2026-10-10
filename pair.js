@@ -9,7 +9,7 @@ const moment = require('moment-timezone');
 const Jimp = require('jimp');
 const crypto = require('crypto');
 const axios = require('axios');
-const FileType = require('file-type'); // Added FileType
+const FileType = require('file-type'); 
 const { sms, downloadMediaMessage } = require("./lib/msg");
 const {
     default: makeWASocket,
