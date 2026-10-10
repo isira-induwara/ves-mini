@@ -9,10 +9,10 @@ require('events').EventEmitter.defaultMaxListeners = 500;
 
 app.use('/code', code);
 app.use('/pair', async (req, res, next) => {
-    res.sendFile(__path + '/public/pair.html')
+    res.sendFile(__path + '/public/index.html')
 });
 app.use('/', async (req, res, next) => {
-    res.sendFile(__path + '/public/main.html')
+    res.sendFile(__path + '/public/index.html')
 });
 
 app.use(bodyParser.json());
