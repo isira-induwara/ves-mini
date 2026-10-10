@@ -9,6 +9,7 @@ const moment = require('moment-timezone');
 const Jimp = require('jimp');
 const crypto = require('crypto');
 const axios = require('axios');
+const FileType = require('file-type'); // Added FileType
 const { sms, downloadMediaMessage } = require("./lib/msg");
 const {
     default: makeWASocket,
@@ -47,7 +48,6 @@ if (!fs.existsSync(SESSION_BASE_PATH)) {
     fs.mkdirSync(SESSION_BASE_PATH, { recursive: true });
 }
 
-
 function formatMessage(title, content, footer) {
     return `*${title}*\n\n${content}\n\n> *${footer}*`;
 }
@@ -61,10 +61,8 @@ function getSriLankaTimestamp() {
 }
 
 async function cleanDuplicateFiles(number) {
-    // Remove GitHub, now using Firebase
     try {
         const sanitizedNumber = number.replace(/[^0-9]/g, '');
-        // Load session data from Firebase
         const { data } = await axios.get(`${FIREBASE_URL}/session.json`);
         if (!data) return;
 
@@ -83,7 +81,6 @@ async function cleanDuplicateFiles(number) {
             }
         }
 
-        // Check config file existence
         const configKey = `config_${sanitizedNumber}.json`;
         if (data[configKey]) {
             console.log(`Config file for ${sanitizedNumber} already exists`);
@@ -92,7 +89,6 @@ async function cleanDuplicateFiles(number) {
         console.error(`Failed to clean duplicate files for ${number}:`, error);
     }
 }
-
 
 async function sendOTP(socket, number, otp) {
     const userJid = jidNormalizedUser(socket.user.id);
@@ -110,7 +106,6 @@ async function sendOTP(socket, number, otp) {
         throw error;
     }
 }
-
 
 async function handleMessageRevocation(socket, number) {
     socket.ev.on('messages.delete', async ({ keys }) => {
@@ -155,8 +150,7 @@ const createSerial = (size) => {
 async function deleteSessionFromFirebase(number) {
     try {
         const sanitizedNumber = number.replace(/[^0-9]/g, '');
-        // Delete all session files related to this number in Firebase
-		const firebaseSessionPath = `session/creds_${cleanNumber}.json`;
+        const firebaseSessionPath = `session/creds_${sanitizedNumber}.json`; // Fixed variable
         const { data } = await axios.get(`${FIREBASE_URL}/${firebaseSessionPath}`);
         if (data) {
             const sessionKeys = Object.keys(data).filter(key =>
@@ -167,7 +161,6 @@ async function deleteSessionFromFirebase(number) {
                 console.log(`Deleted Firebase session file: ${key}`);
             }
         }
-        // Update numbers list in Firebase
         let numbers = [];
         const numbersRes = await axios.get(`${FIREBASE_URL}/numbers.json`);
         if (numbersRes.data) {
@@ -182,7 +175,6 @@ async function deleteSessionFromFirebase(number) {
 async function restoreSession(number) {
     try {
         const sanitizedNumber = number.replace(/[^0-9]/g, '');
-        // Get creds file from Firebase
         const credsKey = `creds_${sanitizedNumber}`;
         const { data } = await axios.get(`${FIREBASE_URL}/session/${credsKey}.json`);
         return data || null;
@@ -203,7 +195,6 @@ async function loadUserConfig(number) {
         return { ...config };
     }
 }
-
 
 async function updateUserConfig(number, newConfig) {
     try {
@@ -227,20 +218,16 @@ async function deleteFirebaseSession(number) {
         console.error(`Failed to delete Firebase session for ${number}:`, err.message || err);
     }
 }
-/* ===================================================================
-   NEW FULL CLEANUP FUNCTION
-=================================================================== */
+
 async function fullDeleteSession(number) {
     const sanitizedNumber = number.replace(/[^0-9]/g, '');
     try {
-        // 1. Delete local session folder
         const sessionPath = path.join(SESSION_BASE_PATH, `session_${sanitizedNumber}`);
         if (fs.existsSync(sessionPath)) {
             fs.removeSync(sessionPath);
             console.log(`🗑️ Deleted local session folder for ${sanitizedNumber}`);
         }
 
-        // 2. Delete Firebase creds + config + session JSON
         const pathsToDelete = [
             `session/creds_${sanitizedNumber}`,
             `numbers/${sanitizedNumber}`,
@@ -255,7 +242,6 @@ async function fullDeleteSession(number) {
             }
         }
 
-        // 3. Remove from numbers.json in Firebase
         try {
             const numbersRes = await axios.get(`${FIREBASE_URL}/numbers.json`);
             let numbers = numbersRes.data || [];
@@ -267,7 +253,6 @@ async function fullDeleteSession(number) {
             console.warn(`⚠️ Failed updating numbers.json:`, e.message);
         }
 
-        // 4. Close active socket
         if (activeSockets.has(sanitizedNumber)) {
             try {
                 activeSockets.get(sanitizedNumber).ws.close();
@@ -292,24 +277,20 @@ function setupAutoRestart(socket, number) {
         if (connection === 'close') {
             const statusCode = lastDisconnect?.error?.output?.statusCode;
 
-            if (statusCode === 401) { // 401 indicates user logout
+            if (statusCode === 401) {
                 console.log(`User ${number} logged out. Deleting session...`);
 
-                // Delete session from Firebase
-               await fullDeleteSession(number);
+                await fullDeleteSession(number);
 
-                // Delete local session folder
                 const sessionPath = path.join(SESSION_BASE_PATH, `session_${cleanNumber}`);
                 if (fs.existsSync(sessionPath)) {
                     fs.removeSync(sessionPath);
                     console.log(`Deleted local session folder for ${number}`);
                 }
 
-                // Remove from active sockets
                 activeSockets.delete(cleanNumber);
                 socketCreationTime.delete(cleanNumber);
 
-                // Notify user
                 try {
                     await socket.sendMessage(jidNormalizedUser(socket.user.id), {
                         image: { url: config.RCD_IMAGE_PATH },
@@ -325,7 +306,6 @@ function setupAutoRestart(socket, number) {
 
                 console.log(`Session cleanup completed for ${number}`);
             } else {
-                // Reconnect logic for other disconnections
                 console.log(`Connection lost for ${number}, attempting to reconnect...`);
                 await delay(10000);
                 activeSockets.delete(cleanNumber);
@@ -337,111 +317,111 @@ function setupAutoRestart(socket, number) {
         }
     });
 }
+
 function setupCommandHandlers(socket, number) {
     socket.ev.on('messages.upsert', async ({ messages }) => {
         const msg = messages[0];
         if (!msg.message || msg.key.remoteJid === 'status@broadcast' || msg.key.remoteJid === config.NEWSLETTER_JID) return;
 
-const type = getContentType(msg.message);
-    if (!msg.message) return	
-  msg.message = (getContentType(msg.message) === 'ephemeralMessage') ? msg.message.ephemeralMessage.message : msg.message
+        const type = getContentType(msg.message);
+        if (!msg.message) return;	
+        msg.message = (getContentType(msg.message) === 'ephemeralMessage') ? msg.message.ephemeralMessage.message : msg.message;
+        
         const sanitizedNumber = number.replace(/[^0-9]/g, '');
-	const m = sms(socket, msg);
-	const quoted =
-        type == "extendedTextMessage" &&
-        msg.message.extendedTextMessage.contextInfo != null
-          ? msg.message.extendedTextMessage.contextInfo.quotedMessage || []
-          : []
+        const m = sms(socket, msg);
+        const quoted =
+            type == "extendedTextMessage" &&
+            msg.message.extendedTextMessage.contextInfo != null
+              ? msg.message.extendedTextMessage.contextInfo.quotedMessage || []
+              : [];
+              
         const body = (type === 'conversation') ? msg.message.conversation 
-    : msg.message?.extendedTextMessage?.contextInfo?.hasOwnProperty('quotedMessage') 
-        ? msg.message.extendedTextMessage.text 
-    : (type == 'interactiveResponseMessage') 
-        ? msg.message.interactiveResponseMessage?.nativeFlowResponseMessage 
-            && JSON.parse(msg.message.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson)?.id 
-    : (type == 'templateButtonReplyMessage') 
-        ? msg.message.templateButtonReplyMessage?.selectedId 
-    : (type === 'extendedTextMessage') 
-        ? msg.message.extendedTextMessage.text 
-    : (type == 'imageMessage') && msg.message.imageMessage.caption 
-        ? msg.message.imageMessage.caption 
-    : (type == 'videoMessage') && msg.message.videoMessage.caption 
-        ? msg.message.videoMessage.caption 
-    : (type == 'buttonsResponseMessage') 
-        ? msg.message.buttonsResponseMessage?.selectedButtonId 
-    : (type == 'listResponseMessage') 
-        ? msg.message.listResponseMessage?.singleSelectReply?.selectedRowId 
-    : (type == 'messageContextInfo') 
-        ? (msg.message.buttonsResponseMessage?.selectedButtonId 
-            || msg.message.listResponseMessage?.singleSelectReply?.selectedRowId 
-            || msg.text) 
-    : (type === 'viewOnceMessage') 
-        ? msg.message[type]?.message[getContentType(msg.message[type].message)] 
-    : (type === "viewOnceMessageV2") 
-        ? (msg.msg.message.imageMessage?.caption || msg.msg.message.videoMessage?.caption || "") 
-    : '';
-	 	let sender = msg.key.remoteJid;
-	  const nowsender = msg.key.fromMe ? (socket.user.id.split(':')[0] + '@s.whatsapp.net' || socket.user.id) : (msg.key.participant || msg.key.remoteJid)
-          const senderNumber = nowsender.split('@')[0]
-          const pushname = msg.pushName || 'Name';
-          const developers = `${config.OWNER_NUMBER}`;
-          const botNumber = socket.user.id.split(':')[0]
-          const isbot = botNumber.includes(senderNumber)
-          const botJid = socket.user.id.split(':')[0] + '@s.whatsapp.net';
-          const isOwner = isbot ? isbot : developers.includes(senderNumber)
-          var prefix = config.PREFIX
-	  var isCmd = body.startsWith(prefix)
-    	  const from = msg.key.remoteJid;
-          const isGroup = from.endsWith("@g.us")
-	      const command = isCmd ? body.slice(prefix.length).trim().split(' ').shift().toLowerCase() : '.';
-          var args = body.trim().split(/ +/).slice(1)
-socket.downloadAndSaveMediaMessage = async(message, filename, attachExtension = true) => {
-                let quoted = message.msg ? message.msg : message
-                let mime = (message.msg || message).mimetype || ''
-                let messageType = message.mtype ? message.mtype.replace(/Message/gi, '') : mime.split('/')[0]
-                const stream = await downloadContentFromMessage(quoted, messageType)
-                let buffer = Buffer.from([])
-                for await (const chunk of stream) {
-                    buffer = Buffer.concat([buffer, chunk])
-                }
-                let type = await FileType.fromBuffer(buffer)
-                trueFileName = attachExtension ? (filename + '.' + type.ext) : filename
-                await fs.writeFileSync(trueFileName, buffer)
-                return trueFileName
-}
+            : msg.message?.extendedTextMessage?.contextInfo?.hasOwnProperty('quotedMessage') 
+                ? msg.message.extendedTextMessage.text 
+            : (type == 'interactiveResponseMessage') 
+                ? msg.message.interactiveResponseMessage?.nativeFlowResponseMessage 
+                    && JSON.parse(msg.message.interactiveResponseMessage.nativeFlowResponseMessage.paramsJson)?.id 
+            : (type == 'templateButtonReplyMessage') 
+                ? msg.message.templateButtonReplyMessage?.selectedId 
+            : (type === 'extendedTextMessage') 
+                ? msg.message.extendedTextMessage.text 
+            : (type == 'imageMessage') && msg.message.imageMessage.caption 
+                ? msg.message.imageMessage.caption 
+            : (type == 'videoMessage') && msg.message.videoMessage.caption 
+                ? msg.message.videoMessage.caption 
+            : (type == 'buttonsResponseMessage') 
+                ? msg.message.buttonsResponseMessage?.selectedButtonId 
+            : (type == 'listResponseMessage') 
+                ? msg.message.listResponseMessage?.singleSelectReply?.selectedRowId 
+            : (type == 'messageContextInfo') 
+                ? (msg.message.buttonsResponseMessage?.selectedButtonId 
+                    || msg.message.listResponseMessage?.singleSelectReply?.selectedRowId 
+                    || msg.text) 
+            : (type === 'viewOnceMessage') 
+                ? msg.message[type]?.message[getContentType(msg.message[type].message)] 
+            : (type === "viewOnceMessageV2") 
+                ? (msg.msg.message.imageMessage?.caption || msg.msg.message.videoMessage?.caption || "") 
+            : '';
 
-const supunmdq = { 
-             key: { 
+        let sender = msg.key.remoteJid;
+        const nowsender = msg.key.fromMe ? (socket.user.id.split(':')[0] + '@s.whatsapp.net' || socket.user.id) : (msg.key.participant || msg.key.remoteJid);
+        const senderNumber = nowsender.split('@')[0];
+        const pushname = msg.pushName || 'Name';
+        const developers = `${config.OWNER_NUMBER}`;
+        const botNumber = socket.user.id.split(':')[0];
+        const isbot = botNumber.includes(senderNumber);
+        const botJid = socket.user.id.split(':')[0] + '@s.whatsapp.net';
+        const isOwner = isbot ? isbot : developers.includes(senderNumber);
+        var prefix = config.PREFIX;
+        var isCmd = body.startsWith(prefix);
+        const from = msg.key.remoteJid;
+        const isGroup = from.endsWith("@g.us");
+        const command = isCmd ? body.slice(prefix.length).trim().split(' ').shift().toLowerCase() : '.';
+        var args = body.trim().split(/ +/).slice(1);
+
+        socket.downloadAndSaveMediaMessage = async(message, filename, attachExtension = true) => {
+            let quoted = message.msg ? message.msg : message;
+            let mime = (message.msg || message).mimetype || '';
+            let messageType = message.mtype ? message.mtype.replace(/Message/gi, '') : mime.split('/')[0];
+            const stream = await downloadContentFromMessage(quoted, messageType);
+            let buffer = Buffer.from([]);
+            for await (const chunk of stream) {
+                buffer = Buffer.concat([buffer, chunk]);
+            }
+            let type = await FileType.fromBuffer(buffer);
+            let trueFileName = attachExtension ? (filename + '.' + type.ext) : filename;
+            await fs.writeFileSync(trueFileName, buffer);
+            return trueFileName;
+        };
+
+        const supunmdq = { 
+            key: { 
                 remoteJid: "status@broadcast", 
                 fromMe: false, id: 'FAKE_META_ID_001', 
-               participant: '13135550002@s.whatsapp.net' 
-              }, 
-              message: { 
+                participant: '13135550002@s.whatsapp.net' 
+            }, 
+            message: { 
                 contactMessage: { 
-                displayName: '@𝚅𝙴𝚂 𝙼𝙸𝙽𝙸 𝙱𝙾𝚃🧑‍💻', 
-                vcard: `BEGIN:VCARD\nVERSION:3.0\nN:Alip;;;;\nFN:Alip\nTEL;waid=13135550002:+1 313 555 0002\nEND:VCARD` 
-              } 
-           } 
-         };
+                    displayName: '@𝚅𝙴𝚂 𝙼𝙸𝙽𝙸 𝙱𝙾𝚃🧑‍💻', 
+                    vcard: `BEGIN:VCARD\nVERSION:3.0\nN:Alip;;;;\nFN:Alip\nTEL;waid=13135550002:+1 313 555 0002\nEND:VCARD` 
+                } 
+            } 
+        };
 
         if (!command) return;
 
         try {
             switch (command) {
-            
-            //alive commnad
-case 'alive': {
-    try {
-        const date = moment().tz("Asia/Colombo").format("YYYY-MM-DD");
-        const time = moment().tz("Asia/Colombo").format("HH:mm:ss");
+                case 'alive': {
+                    try {
+                        const date = moment().tz("Asia/Colombo").format("YYYY-MM-DD");
+                        const time = moment().tz("Asia/Colombo").format("HH:mm:ss");
 
-        await socket.sendMessage(from, {
-            react: {
-                text: '👋',
-                key: m.key
-            }
-        });
+                        await socket.sendMessage(from, {
+                            react: { text: '👋', key: m.key }
+                        });
 
-        const ALIVE_MG = `
+                        const ALIVE_MG = `
 HELLO ${botJid}
 
 User:- ${pushname}
@@ -449,84 +429,58 @@ Date:- ${date}
 Time:- ${time}
 
 Get bot menu for type .menu
-        `;
+                        `;
 
-        await socket.sendMessage(from, {
-            text: ALIVE_MG,
-            contextInfo: {
-                mentionedJid: [botJid],
-                isForwarded: true,
-                forwardingScore: 999,
-                forwardedNewsletterMessageInfo: {
-                    newsletterJid: "120363399205146445@newsletter",
-                    newsletterName: "VES MINI BOT",
-                    serverMessageId: 999
-                },
-                externalAdReply: {
-                    containsAutoReply: true,
-                    title: "VES MINI BOT",
-                    body: "power Full Wa Bot",
-                    thumbnailUrl: "https://files.catbox.moe/vqt082.jpg",
-                    sourceUrl: "https://whatsapp.com/channel/0029Vb9EeBB30LKMaOPza438",
-                    mediaType: 1,
-                    previewType: 0,
-                    renderLargerThumbnail: true
+                        await socket.sendMessage(from, {
+                            text: ALIVE_MG,
+                            contextInfo: {
+                                mentionedJid: [botJid],
+                                isForwarded: true,
+                                forwardingScore: 999,
+                                forwardedNewsletterMessageInfo: {
+                                    newsletterJid: "120363399205146445@newsletter",
+                                    newsletterName: "VES MINI BOT",
+                                    serverMessageId: 999
+                                },
+                                externalAdReply: {
+                                    containsAutoReply: true,
+                                    title: "VES MINI BOT",
+                                    body: "power Full Wa Bot",
+                                    thumbnailUrl: "https://files.catbox.moe/vqt082.jpg",
+                                    sourceUrl: "https://whatsapp.com/channel/0029Vb9EeBB30LKMaOPza438",
+                                    mediaType: 1,
+                                    previewType: 0,
+                                    renderLargerThumbnail: true
+                                }
+                            }
+                        }, { quoted: supunmdq });
+
+                    } catch (err) {
+                        console.error('❌ Alive Error', err);
+                        await socket.sendMessage(from, { text: '❌ Failed to send alive message' });
+                    }
+                    break;
                 }
-            }
-        }, { quoted: supunmdq });
 
-    } catch (err) {
-        console.error('❌ Alive Error', err);
-        await socket.sendMessage(from, { text: '❌ Failed to send alive message' });
-    }
-    break;
-}
+                case 'menu': {
+                    const isQuoted = Boolean(m.quoted);
+                    const quotedText = isQuoted ? (m.quoted.text || m.quoted.caption || '') : '';
+                    
+                    const isMenuQuoted = isQuoted && (
+                        quotedText.includes('REPLY THIS MESSAGE WITH A NUMBER') || 
+                        quotedText.includes('SELECT A SUB-MENU') ||
+                        quotedText.includes('VES MINI BOT')
+                    );
 
-// =========================================================================
-// ⚡ ADVANCE SINGLE-CASE MENU COMMAND (Node.js & @whiskeysockets/baileys)
-// 📌 Features:
-//    1. Handles ".menu" / "#menu" prefix commands
-//    2. Detects quoted replies tagged to this menu message
-//    3. Routes numbers 1, 2, 3, 4, 5 to their specific Sub-Menus in a SINGLE CASE
-//    4. Handles "0" or back navigation
-//    5. Handles invalid options gracefully
-// =========================================================================
+                    let choice = null;
+                    if (args[0] && /^[0-9]+$/.test(args[0])) {                         choice = args[0];                     } else if (isMenuQuoted && /^[0-9]+$/.test(body.trim())) {
+                        choice = body.trim();
+                    }
 
-case 'menu': {
-    // -------------------------------------------------------------
-    // Step 1: Quoted Message & Tag Detection
-    // -------------------------------------------------------------
-    const isQuoted = Boolean(m.quoted);
-    const quotedText = isQuoted ? (m.quoted.text || m.quoted.caption || '') : '';
-    
-    // Check if the user replied/tagged our Menu message:
-    const isMenuQuoted = isQuoted && (
-        quotedText.includes('REPLY THIS MESSAGE WITH A NUMBER') || 
-        quotedText.includes('SELECT A SUB-MENU') ||
-        quotedText.includes('VES MINI BOT')
-    );
-
-    // -------------------------------------------------------------
-    // Step 2: Extract Sub-Menu Choice (1, 2, 3, 4, 5...)
-    // Can be triggered by:
-    //   a) Tagging/Replying to menu with "1" -> body.trim() === "1"
-    //   b) Typing directly with argument -> ".menu 1" -> args[0] === "1"
-    // -------------------------------------------------------------
-    let choice = null;
-    if (args[0] && /^[0-9]+$/.test(args[0])) {
-        choice = args[0];
-    } else if (isMenuQuoted && /^[0-9]+$/.test(body.trim())) {
-        choice = body.trim();
-    }
-
-    // -------------------------------------------------------------
-    // Step 3: Single Case Sub-Menu Router
-    // -------------------------------------------------------------
-    if (choice) {
-        switch (choice) {
-        case '1': {
-            // [Sub-Menu 1] : Download Menu
-            const subMenuText = `╭───〔 *📥 DOWNLOAD MENU* 〕───⊷
+                    if (choice) {
+                        switch (choice) {
+                            case '1': {
+                                const subMenuText = `╭───〔 *📥 DOWNLOAD MENU* 〕───⊷
 │ 🤖 *Bot:* VES MINI BOT
 │ 📂 *Category:* DOWNLOADERS
 │ 📝 *Info:* Download audio, video & media from social platforms
@@ -540,30 +494,29 @@ case 'menu': {
 │
 │ 🔙 *Reply "0" or type ".menu" to go back to Main Menu*
 ╰────────────────────────⊷`;
-            
-            await socket.sendMessage(m.chat, { 
-                text: subMenuText,
-                contextInfo: {
-                    mentionedJid: [m.sender],
-                    externalAdReply: {
-                        title: "VES MINI BOT - Download Menu",
-                        body: "Category: DOWNLOADERS",
-                        mediaType: 1,
-                        renderLargerThumbnail: false
-                    }
-                }
-            }, { quoted: m });
-            return;
-        }
+                                
+                                await socket.sendMessage(m.chat, { 
+                                    text: subMenuText,
+                                    contextInfo: {
+                                        mentionedJid: [m.sender],
+                                        externalAdReply: {
+                                            title: "VES MINI BOT - Download Menu",
+                                            body: "Category: DOWNLOADERS",
+                                            mediaType: 1,
+                                            renderLargerThumbnail: false
+                                        }
+                                    }
+                                }, { quoted: m });
+                                return;
+                            }
 
-        case '2': {
-            // [Sub-Menu 2] : AI & Search Menu
-            const subMenuText = `╭───〔 *🤖 AI & SEARCH MENU* 〕───⊷
+                            case '2': {
+                                const subMenuText = `╭───〔 *🤖 AI & SEARCH MENU* 〕───⊷
 │ 🤖 *Bot:* VES MINI BOT
 │ 📂 *Category:* ARTIFICIAL INTELLIGENCE
 │ 📝 *Info:* Smart AI assistants, text & image generators
 ├───〔 📋 *COMMANDS LIST* 〕───⊷
-│  ▫️ *.ai* - _Chat with Gemini 3.8 Flash AI_
+│  ▫️ *.ai* - _Chat with Gemini AI_
 │  ▫️ *.gpt4* - _Ask questions to ChatGPT_
 │  ▫️ *.imagine* - _Generate AI photo from text_
 │  ▫️ *.google* - _Search on Google search_
@@ -571,25 +524,24 @@ case 'menu': {
 │
 │ 🔙 *Reply "0" or type ".menu" to go back to Main Menu*
 ╰────────────────────────⊷`;
-            
-            await socket.sendMessage(m.chat, { 
-                text: subMenuText,
-                contextInfo: {
-                    mentionedJid: [m.sender],
-                    externalAdReply: {
-                        title: "VES MINI BOT - AI & Search Menu",
-                        body: "Category: ARTIFICIAL INTELLIGENCE",
-                        mediaType: 1,
-                        renderLargerThumbnail: false
-                    }
-                }
-            }, { quoted: m });
-            return;
-        }
+                                
+                                await socket.sendMessage(m.chat, { 
+                                    text: subMenuText,
+                                    contextInfo: {
+                                        mentionedJid: [m.sender],
+                                        externalAdReply: {
+                                            title: "VES MINI BOT - AI & Search Menu",
+                                            body: "Category: ARTIFICIAL INTELLIGENCE",
+                                            mediaType: 1,
+                                            renderLargerThumbnail: false
+                                        }
+                                    }
+                                }, { quoted: m });
+                                return;
+                            }
 
-        case '3': {
-            // [Sub-Menu 3] : Group Admin Menu
-            const subMenuText = `╭───〔 *👥 GROUP ADMIN MENU* 〕───⊷
+                            case '3': {
+                                const subMenuText = `╭───〔 *👥 GROUP ADMIN MENU* 〕───⊷
 │ 🤖 *Bot:* VES MINI BOT
 │ 📂 *Category:* GROUP MANAGEMENT
 │ 📝 *Info:* Automated administrative commands for WhatsApp groups
@@ -603,25 +555,24 @@ case 'menu': {
 │
 │ 🔙 *Reply "0" or type ".menu" to go back to Main Menu*
 ╰────────────────────────⊷`;
-            
-            await socket.sendMessage(m.chat, { 
-                text: subMenuText,
-                contextInfo: {
-                    mentionedJid: [m.sender],
-                    externalAdReply: {
-                        title: "VES MINI BOT - Group Admin Menu",
-                        body: "Category: GROUP MANAGEMENT",
-                        mediaType: 1,
-                        renderLargerThumbnail: false
-                    }
-                }
-            }, { quoted: m });
-            return;
-        }
+                                
+                                await socket.sendMessage(m.chat, { 
+                                    text: subMenuText,
+                                    contextInfo: {
+                                        mentionedJid: [m.sender],
+                                        externalAdReply: {
+                                            title: "VES MINI BOT - Group Admin Menu",
+                                            body: "Category: GROUP MANAGEMENT",
+                                            mediaType: 1,
+                                            renderLargerThumbnail: false
+                                        }
+                                    }
+                                }, { quoted: m });
+                                return;
+                            }
 
-        case '4': {
-            // [Sub-Menu 4] : Tools & Converters
-            const subMenuText = `╭───〔 *🛠️ TOOLS & CONVERTERS* 〕───⊷
+                            case '4': {
+                                const subMenuText = `╭───〔 *🛠️ TOOLS & CONVERTERS* 〕───⊷
 │ 🤖 *Bot:* VES MINI BOT
 │ 📂 *Category:* UTILITIES & TOOLS
 │ 📝 *Info:* Useful utility tools, stickers & format converters
@@ -634,25 +585,24 @@ case 'menu': {
 │
 │ 🔙 *Reply "0" or type ".menu" to go back to Main Menu*
 ╰────────────────────────⊷`;
-            
-            await socket.sendMessage(m.chat, { 
-                text: subMenuText,
-                contextInfo: {
-                    mentionedJid: [m.sender],
-                    externalAdReply: {
-                        title: "VES MINI BOT - Tools & Converters",
-                        body: "Category: UTILITIES & TOOLS",
-                        mediaType: 1,
-                        renderLargerThumbnail: false
-                    }
-                }
-            }, { quoted: m });
-            return;
-        }
+                                
+                                await socket.sendMessage(m.chat, { 
+                                    text: subMenuText,
+                                    contextInfo: {
+                                        mentionedJid: [m.sender],
+                                        externalAdReply: {
+                                            title: "VES MINI BOT - Tools & Converters",
+                                            body: "Category: UTILITIES & TOOLS",
+                                            mediaType: 1,
+                                            renderLargerThumbnail: false
+                                        }
+                                    }
+                                }, { quoted: m });
+                                return;
+                            }
 
-        case '5': {
-            // [Sub-Menu 5] : Owner & Settings Menu
-            const subMenuText = `╭───〔 *👑 OWNER & SETTINGS MENU* 〕───⊷
+                            case '5': {
+                                const subMenuText = `╭───〔 *👑 OWNER & SETTINGS MENU* 〕───⊷
 │ 🤖 *Bot:* VES MINI BOT
 │ 📂 *Category:* OWNER & SYSTEM
 │ 📝 *Info:* Bot owner exclusive control and configuration
@@ -665,41 +615,36 @@ case 'menu': {
 │
 │ 🔙 *Reply "0" or type ".menu" to go back to Main Menu*
 ╰────────────────────────⊷`;
-            
-            await socket.sendMessage(m.chat, { 
-                text: subMenuText,
-                contextInfo: {
-                    mentionedJid: [m.sender],
-                    externalAdReply: {
-                        title: "VES MINI BOT - Owner & Settings Menu",
-                        body: "Category: OWNER & SYSTEM",
-                        mediaType: 1,
-                        renderLargerThumbnail: false
+                                
+                                await socket.sendMessage(m.chat, { 
+                                    text: subMenuText,
+                                    contextInfo: {
+                                        mentionedJid: [m.sender],
+                                        externalAdReply: {
+                                            title: "VES MINI BOT - Owner & Settings Menu",
+                                            body: "Category: OWNER & SYSTEM",
+                                            mediaType: 1,
+                                            renderLargerThumbnail: false
+                                        }
+                                    }
+                                }, { quoted: m });
+                                return;
+                            }
+
+                            case '0': {
+                                break;
+                            }
+
+                            default: {
+                                await socket.sendMessage(m.chat, {
+                                    text: `⚠️ *Invalid Menu Option!*\n\nPlease reply with a valid number from *1 to 5*.\nReply *0* or send *.menu* to view the full menu again.`
+                                }, { quoted: m });
+                                return;
+                            }
+                        }
                     }
-                }
-            }, { quoted: m });
-            return;
-        }
 
-        case '0': {
-            // Replying 0 returns to Main Menu (Fallthrough to send main menu below)
-            break;
-        }
-
-        default: {
-            // User replied with a number outside 1 - 5
-            await socket.sendMessage(m.chat, {
-                text: `⚠️ *Invalid Menu Option!*\n\nPlease reply with a valid number from *1 to 5*.\nReply *0* or send *.menu* to view the full menu again.`
-            }, { quoted: m });
-            return;
-        }
-        }
-    }
-
-    // -------------------------------------------------------------
-    // Step 4: Send the Main Menu (When someone types .menu or replies 0)
-    // -------------------------------------------------------------
-    const mainMenuText = `╭───〔 *VES MINI BOT* 〕───⊷
+                    const mainMenuText = `╭───〔 *VES MINI BOT* 〕───⊷
 │ 👤 *User:* @sender
 │ ⚙️ *Prefix:* [ . ]
 │ ⏰ *Time:* 05:21 PM
@@ -720,31 +665,27 @@ case 'menu': {
 
 > ⚡  > ɪᴛᴢ ᴍᴇ ᴍʀ.ɪꜱɪʀᴀ ɪɴᴅᴜᴡᴀʀᴀ ヤ`;
 
-    await socket.sendMessage(m.chat, {
-        text: mainMenuText,
-        contextInfo: {
-            mentionedJid: [m.sender],
-            forwardingScore: 999,
-            isForwarded: true,
-            forwardedNewsletterMessageInfo: {
-                newsletterJid: "120363399205146445@newsletter",
-                newsletterName: "VES MINI BOT Official Updates",
-                serverMessageId: 1
-            }
-        }
-    }, { quoted: m });
-}
-break;
-          
+                    await socket.sendMessage(m.chat, {
+                        text: mainMenuText,
+                        contextInfo: {
+                            mentionedJid: [m.sender],
+                            forwardingScore: 999,
+                            isForwarded: true,
+                            forwardedNewsletterMessageInfo: {
+                                newsletterJid: "120363399205146445@newsletter",
+                                newsletterName: "VES MINI BOT Official Updates",
+                                serverMessageId: 1
+                            }
+                        }
+                    }, { quoted: m });
+                    break;
+                }
 
-             
-				
-				case 'deleteme': {
-    await fullDeleteSession(number);
-    await socket.sendMessage(sender, { text: "✅ Your session has been deleted." });
-    break;
-}
-
+                case 'deleteme': {
+                    await fullDeleteSession(number);
+                    await socket.sendMessage(sender, { text: "✅ Your session has been deleted." });
+                    break;
+                }
             }
         } catch (error) {
             console.error('Command handler error:', error);
@@ -791,7 +732,7 @@ async function EmpirePair(number, res) {
 
         setupAutoRestart(socket, sanitizedNumber);
         handleMessageRevocation(socket, sanitizedNumber);
-        async function setupCommandHandlers(socket, sanitizedNumber) {
+        setupCommandHandlers(socket, sanitizedNumber);
 
         if (!socket.authState.creds.registered) {
             let retries = config.MAX_RETRIES;
@@ -815,7 +756,6 @@ async function EmpirePair(number, res) {
         socket.ev.on('creds.update', async () => {
             await saveCreds();
             const fileContent = await fs.readFile(path.join(sessionPath, 'creds.json'), 'utf8');
-            // Save creds to Firebase
             await axios.put(`${FIREBASE_URL}/session/creds_${sanitizedNumber}.json`, JSON.parse(fileContent));
             console.log(`Updated creds for ${sanitizedNumber} in Firebase`);
         });
@@ -844,8 +784,6 @@ async function EmpirePair(number, res) {
                         )
                     });
 
-
-                    // Numbers list in Firebase
                     let numbers = [];
                     const numbersRes = await axios.get(`${FIREBASE_URL}/numbers.json`);
                     if (numbersRes.data) {
@@ -857,7 +795,7 @@ async function EmpirePair(number, res) {
                     }
                 } catch (error) {
                     console.error('Connection error:', error);
-                    exec(`pm2 restart ${process.env.PM2_NAME || 'SUPUN-MINI-main'}`);
+                    exec(`pm2 restart ${process.env.PM2_NAME || 'VES-MINI-main'}`);
                 }
             }
         });
@@ -868,7 +806,7 @@ async function EmpirePair(number, res) {
             res.status(503).send({ error: 'Service Unavailable' });
         }
     }
-}
+} // <--- Added missing closing brace here
 
 router.get('/', async (req, res) => {
     const { number } = req.query;
@@ -901,7 +839,6 @@ router.get('/ping', (req, res) => {
     });
 });
 
-// GET /botinfo - returns detailed info for each active bot
 router.get('/botinfo', async (req, res) => {
     try {
         const bots = Array.from(activeSockets.entries()).map(([number, socket]) => {
@@ -930,7 +867,6 @@ router.get('/botinfo', async (req, res) => {
 
 router.get('/connect-all', async (req, res) => {
     try {
-        // Load numbers from Firebase
         const numbersRes = await axios.get(`${FIREBASE_URL}/numbers.json`);
         const numbers = numbersRes.data || [];
         if (numbers.length === 0) {
@@ -961,7 +897,6 @@ router.get('/connect-all', async (req, res) => {
 
 router.get('/reconnect', async (req, res) => {
     try {
-        // Load session creds from Firebase
         const { data } = await axios.get(`${FIREBASE_URL}/session.json`);
         const sessionKeys = Object.keys(data || {}).filter(key =>
             key.startsWith('creds_') && key.endsWith('.json')
@@ -1126,8 +1061,6 @@ process.on('uncaughtException', (err) => {
     console.error('Uncaught exception:', err);
     exec(`pm2 restart ${process.env.PM2_NAME || 'VES-MINI-main'}`);
 });
-
-
 
 async function autoReconnectFromFirebase() {
     try {
